@@ -47,6 +47,7 @@
   },
   "bin": {
     "playwright-mcp": "cli.js",
-    "moltbrowser-mcp": "hub-cli.js"
+    "moltbrowser-mcp": "hub-cli.js",
+    "moltbrowser-mcp-server": "hub-cli.js"
   }
 }
