@@ -64,12 +64,17 @@ Browser (Chrome, Firefox, WebKit)
 
 ### Hub Tools
 
-Hub tools are prefixed with `hub_` and appear/disappear as the agent navigates between sites. Two write tools are always available:
+These tools are always available when hub integration is enabled:
 
 | Tool | Description |
 |------|-------------|
-| `hub_upload-config` | Submit a new config to the hub (requires `HUB_API_KEY`) |
-| `hub_vote-on-tool` | Upvote/downvote a tool to signal quality |
+| `hub_execute` | Execute a pre-configured hub tool for the current site. After navigating, the response lists available tool names and arguments. |
+| `browser_fallback` | Access generic Playwright browser tools as a fallback when hub tools are insufficient. Call without arguments to list all available tools. |
+| `contribute_create-config` | Create a new site config on the hub (requires `HUB_API_KEY`) |
+| `contribute_add-tool` | Add a tool to an existing hub config (requires `HUB_API_KEY`) |
+| `contribute_update-tool` | Update an existing tool in a hub config (requires `HUB_API_KEY`) |
+| `contribute_delete-tool` | Delete a tool from a hub config (requires `HUB_API_KEY`) |
+| `contribute_vote-on-tool` | Upvote or downvote a tool to signal quality (requires `HUB_API_KEY`) |
 
 ### Configuration
 
