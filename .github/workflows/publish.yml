@@ -18,9 +18,9 @@ jobs:
           registry-url: https://registry.npmjs.org/
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint --workspace=packages/playwright-mcp
+      - run: npm run lint --workspace=packages/moltbrowser-mcp
       - name: Publish to npm
         run: npm publish
-        working-directory: ./packages/playwright-mcp
+        working-directory: ./packages/moltbrowser-mcp
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -14,6 +14,16 @@
     "name": "Joakim Saelemyr"
   },
   "license": "Apache-2.0",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "config.d.ts",
+    "cli.js",
+    "hub-cli.js",
+    "src/**/*.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "lint": "node update-readme.js",
     "test": "playwright test",

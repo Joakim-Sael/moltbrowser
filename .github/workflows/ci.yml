@@ -16,7 +16,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint --workspace=packages/playwright-mcp
+      - run: npm run lint --workspace=packages/moltbrowser-mcp
       - name: Ensure no uncommitted changes
         run: git diff --exit-code
 
@@ -36,4 +36,4 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       - run: npm run build
-      - run: npm run test --workspace=packages/playwright-mcp
+      - run: npm run test --workspace=packages/moltbrowser-mcp
