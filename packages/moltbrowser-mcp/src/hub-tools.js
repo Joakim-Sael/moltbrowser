@@ -102,6 +102,8 @@ async function executeHubTool(upstreamClient, hubEntry, args) {
     };
   }
 
+  const toolDisplayName = hubEntry.tool.name.replace(/^hub_/, '');
+
   try {
     const result = await upstreamClient.callTool({
       name: 'browser_run_code',
@@ -113,10 +115,33 @@ async function executeHubTool(upstreamClient, hubEntry, args) {
       return {
         content: [{
           type: 'text',
-          text: `Hub tool "${hubEntry.tool.name}" failed:\n${errorText}\n\nUse browser_fallback to access generic Playwright tools.`,
+          text: `Hub tool "${toolDisplayName}" failed:\n${errorText}\n\nUse browser_fallback to access generic Playwright tools.`,
+        }, {
+          type: 'text',
+          text: `\n<vote-hint>This hub tool failed. Downvote it so other agents know it's broken:\ncontribute_vote-on-tool({ configId: "${hubEntry.configId}", toolName: "${toolDisplayName}", vote: -1 })</vote-hint>`,
         }],
         isError: true,
       };
+    }
+
+    // Check if the result indicates a genuine failure.
+    // "[action completed successfully]" is the normal output for action-only tools (no resultSelector) — that's fine.
+    // "[resultSelector matched no elements" means extraction was configured but found nothing — that's a real problem.
+    const resultText = result.content?.map(c => c.text || '').join('\n') || '';
+    const looksLikeBroken = resultText.includes('[resultSelector matched no elements');
+
+    if (result.content) {
+      if (looksLikeBroken) {
+        result.content.push({
+          type: 'text',
+          text: `\n<vote-hint>This hub tool ran but its result selector matched nothing — the selectors may be broken. Downvote it:\ncontribute_vote-on-tool({ configId: "${hubEntry.configId}", toolName: "${toolDisplayName}", vote: -1 })</vote-hint>`,
+        });
+      } else {
+        result.content.push({
+          type: 'text',
+          text: `\n<vote-hint>This hub tool worked. Upvote it so other agents prefer it:\ncontribute_vote-on-tool({ configId: "${hubEntry.configId}", toolName: "${toolDisplayName}", vote: 1 })</vote-hint>`,
+        });
+      }
     }
 
     return result;
@@ -124,7 +149,10 @@ async function executeHubTool(upstreamClient, hubEntry, args) {
     return {
       content: [{
         type: 'text',
-        text: `Hub tool "${hubEntry.tool.name}" failed: ${err.message}\n\nUse browser_fallback to access generic Playwright tools.`,
+        text: `Hub tool "${toolDisplayName}" failed: ${err.message}\n\nUse browser_fallback to access generic Playwright tools.`,
+      }, {
+        type: 'text',
+        text: `\n<vote-hint>This hub tool failed. Downvote it so other agents know it's broken:\ncontribute_vote-on-tool({ configId: "${hubEntry.configId}", toolName: "${toolDisplayName}", vote: -1 })</vote-hint>`,
       }],
       isError: true,
     };
@@ -220,27 +248,33 @@ const hubWriteTools = [
       '  steps: [{ action: "click", selector: "[data-testid=tweetButtonInline]" }]',
       '})',
       '',
-      'EXAMPLE — search form (fill + submit is still atomic enough):',
+      'EXAMPLE — fill a search field (submit is handled by browser_press_key, not this tool):',
       'contribute_add-tool({',
       '  configId: "abc123",',
-      '  name: "search-products",',
-      '  description: "Search products by keyword",',
+      '  name: "fill-search",',
+      '  description: "Fill the search input field with a query. After calling this, use browser_press_key({ key: \'Enter\' }) to submit.",',
       '  selector: "#searchForm",',
-      '  autosubmit: true,',
-      '  submitSelector: "#searchBtn",',
-      '  submitAction: "click",',
-      '  fields: [{ type: "text", selector: "#searchInput", name: "query", description: "Search term" }],',
-      '  resultSelector: ".results li",',
-      '  resultExtract: "list"',
+      '  fields: [{ type: "text", selector: "#searchInput", name: "query", description: "Search term" }]',
       '})',
+      '→ Then the agent calls browser_press_key({ key: "Enter" }) to submit — no CSS selector needed for the button.',
       '',
       'KEY RULES:',
+      '- SELECTORS MUST BE LOCALE-INDEPENDENT. Configs are shared globally — selectors with localized text break for other users.',
+      '  Prefer: data-testid, id, name, type, role, or structural selectors (e.g. form input[type="search"])',
+      '  NEVER use aria-label with translated text (e.g. aria-label="Søk", aria-label="Suche", aria-label="Rechercher").',
+      '  If aria-label is the only option, use the English value only.',
+      '  WRONG: input[aria-label="Søk"]  — only works in Norwegian',
+      '  RIGHT: input[name="search_query"], input#search, input[type="search"]',
       '- Tools must be GENERAL, not hardcoded to a specific instance or position. WRONG: "like-first-post" (hardcoded to first). RIGHT: "like-post" with a parameter that identifies which post (e.g. postIndex: number, or postText: string used in a :has-text selector). If your tool name describes a specific case or position rather than a reusable action, redesign it with a parameter.',
-      '- Prefer small, single-action tools over multi-step workflows',
-      '- For multi-step interactions, create one tool per action (click-compose, fill-text, click-submit) — the calling agent will chain them',
-      '- Click tools use steps: [{ action: "click", selector: "..." }] — do NOT use autosubmit: true for standalone buttons',
-      '- Fill tools need: selector + one field entry',
-      '- Tool names must be kebab-case with a verb: "get-posts", "click-compose-button", "fill-tweet-text", "search-products"',
+      '- ONE ACTION PER TOOL. Each tool does exactly ONE thing. NEVER combine fill + submit in one tool.',
+      '  A fill tool ONLY fills a field (no autosubmit, no submitSelector, no steps with clicks).',
+      '  For submit/search: the agent calls browser_press_key({ key: "Enter" }) after the fill tool — no button selector needed.',
+      '  WRONG: "search-videos" with fields + autosubmit — combines fill and submit.',
+      '  WRONG: "click-search" — fragile, requires finding a submit button selector.',
+      '  RIGHT: "fill-search" (fields only) → agent uses browser_press_key({ key: "Enter" }) to submit.',
+      '- Do NOT create click-submit or click-search tools. Use browser_press_key instead.',
+      '- Fill tools need: selector + one field entry. No autosubmit, no submitSelector, no submitAction.',
+      '- Tool names must be kebab-case with a verb: "get-posts", "click-compose-button", "fill-search"',
       '- Read-only tools only need: selector, resultSelector, resultExtract. No autosubmit, no fields.',
       '- Use fields[] for form inputs — each field\'s name becomes a tool parameter automatically',
       '- resultExtract options: text, html, attribute, list, table',
@@ -451,6 +485,56 @@ const hubWriteTools = [
 
 const VALID_RESULT_EXTRACTS = new Set(['text', 'html', 'attribute', 'list', 'table']);
 const VALID_STEP_ACTIONS = new Set(['navigate', 'click', 'fill', 'select', 'wait', 'extract', 'scroll', 'condition', 'evaluate']);
+
+/**
+ * Detect localized (non-ASCII) text inside aria-label selectors.
+ * Returns an array of { selector, match } objects for each violation found.
+ *
+ * Matches patterns like: aria-label="Søk", aria-label='Rechercher', aria-label="Suche"
+ * Flags any aria-label value containing non-ASCII characters (accented, CJK, Cyrillic, etc.)
+ */
+// eslint-disable-next-line no-control-regex
+const ARIA_LABEL_RE = /aria-label\s*=\s*["']([^"']+)["']/gi;
+const NON_ASCII_RE = /[^\x00-\x7F]/;
+
+function findLocalizedSelectors(args) {
+  const violations = [];
+
+  // Collect all selector strings from the flat args
+  const selectorSources = [];
+  if (args.selector) selectorSources.push({ path: 'selector', value: args.selector });
+  if (args.submitSelector) selectorSources.push({ path: 'submitSelector', value: args.submitSelector });
+  if (args.resultSelector) selectorSources.push({ path: 'resultSelector', value: args.resultSelector });
+  if (args.resultWaitSelector) selectorSources.push({ path: 'resultWaitSelector', value: args.resultWaitSelector });
+
+  if (Array.isArray(args.fields)) {
+    for (let i = 0; i < args.fields.length; i++) {
+      if (args.fields[i].selector) {
+        selectorSources.push({ path: `fields[${i}].selector`, value: args.fields[i].selector });
+      }
+    }
+  }
+
+  if (Array.isArray(args.steps)) {
+    for (let i = 0; i < args.steps.length; i++) {
+      if (args.steps[i].selector) {
+        selectorSources.push({ path: `steps[${i}].selector`, value: args.steps[i].selector });
+      }
+    }
+  }
+
+  for (const { path, value } of selectorSources) {
+    ARIA_LABEL_RE.lastIndex = 0;
+    let m;
+    while ((m = ARIA_LABEL_RE.exec(value)) !== null) {
+      if (NON_ASCII_RE.test(m[1])) {
+        violations.push({ path, selector: value, label: m[1] });
+      }
+    }
+  }
+
+  return violations;
+}
 
 /**
  * Validate that each step has the fields required for its action type.
@@ -714,6 +798,18 @@ async function handleHubWriteTool(toolName, args) {
         };
       }
 
+      // Check for localized aria-label selectors
+      const localizedViolations = findLocalizedSelectors(args);
+      if (localizedViolations.length > 0) {
+        const details = localizedViolations.map(v =>
+          `- ${v.path}: aria-label="${v.label}" contains localized text`
+        ).join('\n');
+        return {
+          content: [{ type: 'text', text: `Error: Selectors contain localized aria-label text that won't work for users in other locales.\n\n${details}\n\nUse locale-independent selectors instead: data-testid, id, name, type, role, or structural selectors (e.g. input[type="search"], form input[name="q"]).\nIf aria-label is the only option, use the English value.` }],
+          isError: true,
+        };
+      }
+
       // Build inputSchema and execution from flat fields
       const inputSchema = buildInputSchema(args);
       const execution = buildExecution(args);
@@ -808,6 +904,18 @@ async function handleHubWriteTool(toolName, args) {
         const available = existingTools.map(t => `"${t.name}"`).join(', ');
         return {
           content: [{ type: 'text', text: `Error: tool "${name}" not found in config ${configId}. Available tools: ${available || '(none)'}` }],
+          isError: true,
+        };
+      }
+
+      // Check for localized aria-label selectors
+      const localizedViolations = findLocalizedSelectors(args);
+      if (localizedViolations.length > 0) {
+        const details = localizedViolations.map(v =>
+          `- ${v.path}: aria-label="${v.label}" contains localized text`
+        ).join('\n');
+        return {
+          content: [{ type: 'text', text: `Error: Selectors contain localized aria-label text that won't work for users in other locales.\n\n${details}\n\nUse locale-independent selectors instead: data-testid, id, name, type, role, or structural selectors (e.g. input[type="search"], form input[name="q"]).\nIf aria-label is the only option, use the English value.` }],
           isError: true,
         };
       }
