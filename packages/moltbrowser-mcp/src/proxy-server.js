@@ -88,9 +88,10 @@ async function startProxy(options) {
         '<workflow>',
         '1. Navigate with browser_navigate. Hub tools are discovered automatically.',
         '2. If hub tools are listed in the response, use hub_execute to run them. ALWAYS prefer hub tools.',
-        '3. If NO hub tools exist or they fail, use browser_fallback for generic Playwright tools (snapshot, click, fill, etc.). Call browser_fallback without arguments to list available tools.',
-        '4. NEVER call browser tools in parallel — always sequentially, one at a time.',
-        '5. CONTRIBUTE before you are done: if you called browser_fallback even once — for any part of the task — you must contribute a config before considering the task complete. This is not optional. See <contribution> below.',
+        '3. After a hub fill tool, use browser_press_key({ key: "Enter" }) to submit. This is more reliable than clicking a submit button.',
+        '4. If NO hub tools exist or they fail, use browser_fallback for generic Playwright tools (snapshot, click, fill, etc.). Call browser_fallback without arguments to list available tools.',
+        '5. NEVER call browser tools in parallel — always sequentially, one at a time.',
+        '6. CONTRIBUTE before you are done: if you called browser_fallback even once — for any part of the task — you must contribute a config before considering the task complete. This is not optional. See <contribution> below.',
         '</workflow>',
         '',
         '<contribution>',
@@ -99,12 +100,31 @@ async function startProxy(options) {
         '',
         'Contribute ONLY when ALL of these are true:',
         '1. You called browser_fallback at least once (even for a single step)',
-        '2. You used browser_snapshot and discovered real CSS selectors on the page',
-        '3. You tested those selectors and they worked',
+        '2. You inspected the DOM to discover real CSS selectors (see <finding-selectors> below)',
+        '3. You verified each selector by testing it on the page',
         '   If you used a condition step, verify the selector in EACH branch separately with',
         '   browser_snapshot — never assume two contexts (e.g. dialog vs. inline) share the same test IDs.',
         '',
         'NEVER contribute if you have not explored the page. A config without real CSS selectors is useless.',
+        '',
+        '<finding-selectors>',
+        'browser_snapshot returns an accessibility tree with refs (e.g. "e12"), NOT CSS selectors.',
+        'You MUST inspect the actual DOM to find real CSS selectors. Do NOT guess selectors from the snapshot.',
+        '',
+        'To find a CSS selector for an element you interacted with:',
+        '1. Use browser_evaluate to inspect the element:',
+        '   browser_fallback({ tool: "browser_evaluate", arguments: {',
+        '     expression: "document.querySelector(\'input[name=search_query]\')?.tagName"',
+        '   }})',
+        '2. Or inspect multiple attributes at once:',
+        '   browser_fallback({ tool: "browser_evaluate", arguments: {',
+        '     expression: "JSON.stringify([...document.querySelectorAll(\'input\')].map(e => ({ tag: e.tagName, id: e.id, name: e.name, type: e.type, placeholder: e.placeholder })))"',
+        '   }})',
+        '3. Verify your chosen selector returns the right element BEFORE contributing.',
+        '',
+        'NEVER fabricate selectors like "input#search" without verifying. On YouTube, #search is a <div>,',
+        'not an <input>. The actual input is input[name="search_query"]. Always check the DOM.',
+        '</finding-selectors>',
         '',
         'How to contribute:',
         '- No hub config exists yet → contribute_create-config(...) then contribute_add-tool(...) for each tool',
@@ -118,8 +138,21 @@ async function startProxy(options) {
         '   - "example.com" ONLY for truly site-wide tools (navigation, global search)',
         'contribute_add-tool({ configId, name, description, selector, ... }) → adds one tool',
         '   Always add read-only extraction tools first (get-posts, get-content, list-items).',
-        '   Create small, single-action tools — NOT multi-step workflows.',
+        '   ONE ACTION PER TOOL. Each tool does exactly ONE thing:',
+        '     - A fill tool ONLY fills a field (no submit, no autosubmit)',
+        '     - A click tool ONLY clicks a button',
+        '     - For search/submit: create a fill tool, then the agent uses browser_press_key({ key: "Enter" }) to submit',
+        '   NEVER combine fill + submit in one tool. NEVER create click-search/click-submit tools — use browser_press_key instead.',
+        '   WRONG: "search-videos" that fills AND submits. WRONG: "click-search" (fragile button selector).',
+        '   RIGHT: "fill-search" (fill only) → agent calls browser_press_key({ key: "Enter" }) to submit.',
         '   Shadow DOM is fully supported — selectors targeting web components work transparently.',
+        '',
+        '   SELECTOR RULES — configs are shared globally, selectors must work for ALL users:',
+        '   - Prefer: data-testid, id, name, type, role, or structural selectors (e.g. form input[type="search"])',
+        '   - NEVER use aria-label with localized/translated text (e.g. aria-label="Søk", aria-label="Suche")',
+        '   - If aria-label is the only option, use the English value only',
+        '   - WRONG: input[aria-label="Søk"] — this only works in Norwegian',
+        '   - RIGHT: input[name="search_query"], input#search, input[type="search"]',
         '',
         'BEFORE SAYING YOU ARE DONE — run this checklist:',
         '  [ ] Did I call browser_fallback at any point? → If yes:',
@@ -135,14 +168,29 @@ async function startProxy(options) {
   function getBrowserFallbackDefinition() {
     return {
       name: 'browser_fallback',
-      description: [
-        'Access generic Playwright browser tools as a fallback when hub tools are insufficient.',
-        'Call without arguments to list all available tools.',
-        'Before calling an unfamiliar tool, use peek: true to inspect its full input schema first.',
-        'Common tools: browser_snapshot (see page accessibility tree), browser_click (click element by ref),',
-        'browser_fill_form (fill multiple fields), browser_type (type text),',
-        'browser_evaluate (run JS on page), browser_take_screenshot (capture page image).',
-      ].join(' '),
+      description: `Access generic Playwright browser tools as a fallback when hub tools are insufficient.
+Works in three modes:
+- No arguments: lists all available Playwright tools
+- peek: true: inspects a tool's full input schema before calling it
+- tool + arguments: executes a Playwright tool (e.g. browser_click, browser_snapshot)
+<important>
+All element-targeting tools use "ref" values from browser_snapshot (e.g., "e12", "e37"), NOT CSS selectors.
+Always take a browser_snapshot first to get element refs, then use those refs in tool calls.
+If you get a validation error, the correct schema will be included in the error response.
+</important>
+<tool-schemas>
+Common tools — use EXACTLY these argument shapes:
+
+browser_click:         { "ref": "e12" }                         — ref from snapshot, NOT a selector
+browser_type:          { "ref": "e12", "text": "hello" }        — ref from snapshot + text to type
+browser_press_key:     { "key": "Enter" }                       — key name
+browser_hover:         { "ref": "e12" }                         — ref from snapshot
+browser_select_option: { "ref": "e12", "values": ["opt1"] }     — ref + values array
+browser_fill_form:     { "fields": [{"ref":"e12","value":"hi"},{"ref":"e15","value":"there"}] }  — array of {ref, value} objects
+
+WRONG: { "selector": "...", "text": "..." }   — never use "selector", always use "ref"
+WRONG: { "fields": {"search": "..."} }        — fields is an ARRAY of {ref, value}, not an object
+</tool-schemas>`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -156,7 +204,7 @@ async function startProxy(options) {
           },
           arguments: {
             type: 'object',
-            description: 'Arguments for the Playwright tool.',
+            description: 'Arguments for the Playwright tool. Use ref values from browser_snapshot for element targeting.',
             additionalProperties: true,
           },
         },
@@ -165,18 +213,25 @@ async function startProxy(options) {
   }
 
   // --- 5. Handle tools/list — minimal tool set ---
+  // Expose browser_navigate and browser_press_key directly from upstream.
+  // browser_press_key is first-class because it's essential for submitting
+  // after hub fill tools (e.g. fill-search → press Enter) without needing
+  // fragile CSS selectors for submit buttons.
+  const FIRST_CLASS_UPSTREAM = ['browser_navigate', 'browser_press_key'];
+
   proxyServer.setRequestHandler(ListToolsRequestSchema, async () => {
     const upstreamTools = await getUpstreamTools();
 
-    // Only expose browser_navigate directly from upstream
-    const navigate = upstreamTools.find(t => t.name === 'browser_navigate');
+    const firstClassTools = FIRST_CLASS_UPSTREAM
+      .map(name => upstreamTools.find(t => t.name === name))
+      .filter(Boolean);
 
     const hubExecute = noHub ? [] : [getHubExecuteToolDefinition()];
     const writeTools = noHub ? [] : getHubWriteToolDefinitions();
 
     return {
       tools: [
-        ...(navigate ? [navigate] : []),
+        ...firstClassTools,
         ...hubExecute,
         getBrowserFallbackDefinition(),
         ...writeTools,
@@ -266,6 +321,22 @@ async function startProxy(options) {
 
     // Proxy to upstream
     const result = await upstreamClient.callTool({ name: innerTool, arguments: innerArgs });
+
+    // Auto-peek on validation error: if the upstream returned a schema validation error
+    // (invalid_type, unrecognized_keys, etc.), automatically append the correct schema
+    // so the agent can self-correct without an extra round-trip.
+    if (result.isError || result.content?.some(c => c.type === 'text' && c.text && (
+      c.text.includes('invalid_type') || c.text.includes('unrecognized_keys') || c.text.includes('invalid_union')
+    ))) {
+      const tools = await getUpstreamTools();
+      const match = tools.find(t => t.name === innerTool);
+      if (match) {
+        result.content.push({
+          type: 'text',
+          text: `\n<correct-schema>\nThe call to ${innerTool} failed due to invalid arguments. Here is the correct schema:\n\n${JSON.stringify(match.inputSchema, null, 2)}\n\nDescription: ${match.description || '(none)'}\n\nRetry with the correct argument format.\n</correct-schema>`,
+        });
+      }
+    }
 
     // After browser_snapshot, check whether the page URL has changed since our last hub lookup.
     // This catches SPA client-side redirects (e.g. x.com → x.com/home) that complete AFTER

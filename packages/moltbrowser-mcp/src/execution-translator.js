@@ -78,6 +78,65 @@ function isNativeFillType(type) {
   return !type || type === 'text' || type === 'textarea' || type === 'number' || type === 'date';
 }
 
+// --- Shadow DOM fallback generator ---
+
+/**
+ * Wrap a Playwright locator call with a try/catch that falls back to
+ * page.evaluate() with deepQuery when the element is inside Shadow DOM.
+ * Playwright's page.locator() can't pierce shadow roots with plain CSS
+ * selectors, so we try native Playwright first (trusted events, framework
+ * compatible) and fall back to deepQuery (shadow-piercing).
+ *
+ * @param {string} playwrightLine - The `await page.locator(...)...` code
+ * @param {string} fallbackBody - JS code to run inside page.evaluate() on failure
+ * @returns {string} try/catch code block
+ */
+// Short timeout for the Playwright try path — if the element is in Shadow DOM,
+// page.locator() won't find it. 3s is plenty for a non-Shadow element to appear;
+// the default 30s would waste time before the fallback kicks in.
+const SHADOW_TRY_TIMEOUT = 3000;
+
+function withShadowFallback(playwrightLine, fallbackBody) {
+  // Inject timeout into Playwright locator calls so the fallback kicks in fast.
+  // Matches .click(), .press(...), .fill(...), .check(), .uncheck(), .selectOption(...)
+  // and adds { timeout: SHADOW_TRY_TIMEOUT } as the last argument.
+  const timedLine = playwrightLine.replace(
+    /\.(click|press|fill|check|uncheck|selectOption)\(([^)]*)\)/,
+    (_, method, args) => {
+      const timeout = `{ timeout: ${SHADOW_TRY_TIMEOUT} }`;
+      return args.trim() ? `.${method}(${args}, ${timeout})` : `.${method}(${timeout})`;
+    }
+  );
+  return [
+    `try {`,
+    `  ${timedLine}`,
+    `} catch {`,
+    `  await page.evaluate(() => { ${DEEP_QUERY_FNS} ${fallbackBody} });`,
+    `}`,
+  ].join('\n');
+}
+
+/**
+ * Shadow DOM fallback for text input: focus via deepQuery, then type with
+ * Playwright's keyboard API. This produces trusted InputEvents that
+ * framework-controlled inputs (React, Polymer/Lit web components) respond to,
+ * unlike setting .value directly which bypasses their event systems.
+ *
+ * @param {string} sel - CSS selector for the input element
+ * @param {string} value - Text to type
+ * @returns {string} try/catch code block
+ */
+function withShadowFillFallback(sel, value) {
+  return [
+    `try {`,
+    `  await page.locator(${quote(sel)}).fill(${quote(value)}, { timeout: ${SHADOW_TRY_TIMEOUT} });`,
+    `} catch {`,
+    `  await page.evaluate(() => { ${DEEP_QUERY_FNS} const _el = deepQuery(${qs(sel)}); if (_el) { _el.focus(); _el.value = ''; _el.dispatchEvent(new Event('input', { bubbles: true })); } });`,
+    `  await page.keyboard.type(${quote(value)});`,
+    `}`,
+  ].join('\n');
+}
+
 // --- Main entry point ---
 
 /**
@@ -139,26 +198,38 @@ function translateSimple(execution, args) {
         : null;
       const sel = lastField ? lastField.selector : execution.selector;
 
+      // Use Playwright's native .press('Enter') for trusted keyboard events.
+      // Falls back to deepQuery + dispatchEvent for Shadow DOM elements.
+      flushBatch();
       if (isPlaywrightSelector(sel)) {
-        flushBatch();
         phases.push(`await page.locator(${quote(sel)}).press('Enter');`);
       } else {
-        batch.push(
-          `{ const _el = deepQuery(${qs(sel)});`,
-          `  if (_el) {`,
-          `    _el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));`,
-          `    _el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true }));`,
-          `    _el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));`,
-          `    const _form = _el.closest('form');`,
-          `    if (_form) { _form.requestSubmit ? _form.requestSubmit() : _form.submit(); }`,
-          `  }`,
+        const enterFallback = [
+          `const _el = deepQuery(${qs(sel)});`,
+          `if (_el) {`,
+          `  _el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));`,
+          `  _el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true }));`,
+          `  _el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));`,
+          `  const _form = _el.closest('form');`,
+          `  if (_form) { _form.requestSubmit ? _form.requestSubmit() : _form.submit(); }`,
           `}`,
-        );
+        ].join(' ');
+        phases.push(withShadowFallback(
+          `await page.locator(${quote(sel)}).press('Enter');`,
+          enterFallback,
+        ));
       }
     } else {
       const submitSel = execution.submitSelector || `${execution.selector} [type="submit"], ${execution.selector} button`;
       flushBatch();
-      phases.push(`await page.locator(${quote(submitSel)}).first().click();`);
+      if (isPlaywrightSelector(submitSel)) {
+        phases.push(`await page.locator(${quote(submitSel)}).first().click();`);
+      } else {
+        phases.push(withShadowFallback(
+          `await page.locator(${quote(submitSel)}).first().click();`,
+          `const _el = deepQuery(${qs(submitSel)}); if (_el) _el.click();`,
+        ));
+      }
     }
   }
 
@@ -204,14 +275,25 @@ function translateSteps(execution, args, opts = {}) {
       case 'click':
         if (selector) {
           flushBatch();
-          phases.push(`await page.locator(${quote(selector)}).first().click();`);
+          if (isPlaywrightSelector(selector)) {
+            phases.push(`await page.locator(${quote(selector)}).first().click();`);
+          } else {
+            phases.push(withShadowFallback(
+              `await page.locator(${quote(selector)}).first().click();`,
+              `const _el = deepQuery(${qs(selector)}); if (_el) _el.click();`,
+            ));
+          }
         }
         break;
 
       case 'fill':
         if (selector && value !== null) {
           flushBatch();
-          phases.push(`await page.locator(${quote(selector)}).first().fill(${quote(value)});`);
+          if (isPlaywrightSelector(selector)) {
+            phases.push(`await page.locator(${quote(selector)}).first().fill(${quote(value)});`);
+          } else {
+            phases.push(withShadowFillFallback(selector, value));
+          }
         }
         break;
 
@@ -382,21 +464,34 @@ function domFieldAction(field, value) {
 }
 
 /**
- * Generate Playwright API lines for filling a field with Playwright-specific selectors.
- * Returns an array of code lines (each is a standalone statement).
+ * Generate Playwright API lines for filling a field.
+ * For Playwright-specific selectors, uses direct locator calls.
+ * For plain CSS selectors, wraps in try/catch with deepQuery fallback
+ * to handle elements inside Shadow DOM.
  */
 function playwrightFieldAction(field, value) {
   const sel = field.selector;
+  const pw = isPlaywrightSelector(sel);
 
   switch (field.type) {
-    case 'select':
-      return [`await page.locator(${quote(sel)}).selectOption(${quote(String(value))});`];
+    case 'select': {
+      const line = `await page.locator(${quote(sel)}).selectOption(${quote(String(value))});`;
+      if (pw) return [line];
+      return [withShadowFallback(line,
+        `const _el = deepQuery(${qs(sel)}); if (_el) { _el.value = ${qs(String(value))}; _el.dispatchEvent(new Event('change', { bubbles: true })); }`
+      )];
+    }
 
-    case 'checkbox':
-      if (value === true || value === 'true' || value === 'on') {
-        return [`await page.locator(${quote(sel)}).check();`];
-      }
-      return [`await page.locator(${quote(sel)}).uncheck();`];
+    case 'checkbox': {
+      const checked = value === true || value === 'true' || value === 'on';
+      const line = checked
+        ? `await page.locator(${quote(sel)}).check();`
+        : `await page.locator(${quote(sel)}).uncheck();`;
+      if (pw) return [line];
+      return [withShadowFallback(line,
+        `const _el = deepQuery(${qs(sel)}); if (_el) { _el.checked = ${checked}; _el.dispatchEvent(new Event('change', { bubbles: true })); }`
+      )];
+    }
 
     case 'radio': {
       let radioSel = sel + `[value="${value}"]`;
@@ -404,11 +499,17 @@ function playwrightFieldAction(field, value) {
         const option = field.options.find(o => o.value === String(value));
         if (option && option.selector) radioSel = option.selector;
       }
-      return [`await page.locator(${quote(radioSel)}).click();`];
+      const line = `await page.locator(${quote(radioSel)}).click();`;
+      if (pw || isPlaywrightSelector(radioSel)) return [line];
+      return [withShadowFallback(line,
+        `const _el = deepQuery(${qs(radioSel)}); if (_el) { _el.checked = true; _el.dispatchEvent(new Event('change', { bubbles: true })); }`
+      )];
     }
 
-    default: // text, number, textarea, date, hidden
-      return [`await page.locator(${quote(sel)}).fill(${quote(String(value))});`];
+    default: { // text, number, textarea, date, hidden
+      if (pw) return [`await page.locator(${quote(sel)}).fill(${quote(String(value))});`];
+      return [withShadowFillFallback(sel, String(value))];
+    }
   }
 }
 
@@ -445,7 +546,7 @@ function addResultWait(phases, execution) {
  */
 function addExtraction(phases, selector, extractMode, attribute) {
   if (!selector) {
-    phases.push(`return '[action ran — no result selector configured]';`);
+    phases.push(`return '[action completed successfully]';`);
     return;
   }
   addStepExtraction(phases, selector, extractMode, attribute);
