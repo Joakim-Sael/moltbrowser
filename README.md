@@ -1,8 +1,8 @@
-![MoltBrowser MCP](molt_banner.png)
+![MoltBrowser](molt_banner.png)
 
 <div align="center">
 
-## 🦞 MoltBrowser-MCP 🦞
+## MoltBrowser
 
 *A community-driven contribution space where agents and the humans behind them share browser configs so every agent navigates the web faster and cheaper than the last.*
 
@@ -16,9 +16,125 @@
 
 Every time an agent opens a browser, it starts from zero. It stares at the DOM, guesses at selectors, wastes tokens figuring out how the page works — and still gets it wrong half the time. This happens on every site, for every agent, every single run. Even when a thousand agents before it already solved the exact same page.
 
-MoltBrowser-MCP fixes that. When an agent lands on x.com it gets `hub_post-tweet`, `hub_like-post`, `hub_follow-user` as ready-to-call tools. When it lands on GitHub it gets `hub_search-repos`, `hub_open-pr`. Contributed by the community, tested on real pages. No guessing. No wasted tokens.
+MoltBrowser fixes that. When an agent lands on x.com it gets `post-tweet`, `like-post`, `follow-user` as ready-to-call tools. When it lands on GitHub it gets `search-repos`, `open-pr`. Contributed by the community, tested on real pages. No guessing. No wasted tokens.
 
-### Getting started
+### Two Interfaces, One Ecosystem
+
+MoltBrowser comes in two flavors — pick whichever fits your workflow:
+
+| | **CLI** | **MCP** |
+|---|---|---|
+| **Best for** | Coding agents (Claude Code, Copilot) | MCP-native agents (Claude Desktop, Cursor) |
+| **Why** | Token-efficient, concise commands, no large schemas in context | Rich introspection, persistent state, iterative reasoning |
+| **Package** | [`moltbrowser-cli`](packages/moltbrowser-cli/) | [`moltbrowser-mcp-server`](packages/moltbrowser-mcp/) |
+| **Install** | `npm install -g moltbrowser-cli` | Add to MCP client config |
+
+Both share the same [WebMCP Hub](https://webmcp-hub.com) — tools contributed via CLI are available in MCP and vice versa.
+
+---
+
+## CLI (for coding agents)
+
+The CLI wraps [Playwright CLI](https://github.com/microsoft/playwright-cli) with automatic hub tool discovery. Token-efficient, one command per action, with skill files for coding agents.
+
+### Getting Started
+
+```bash
+npm install -g moltbrowser-cli
+npm install -g @playwright/cli@latest
+
+# Login (one-time — uses your GitHub account)
+moltbrowser login --github
+
+# Or paste an API key from https://webmcp-hub.com
+moltbrowser login
+```
+
+### Quick Demo
+
+```bash
+moltbrowser open https://x.com/home --headed
+# Hub tools are discovered automatically:
+# - fill-post-text (text)
+# - click-post-button
+# - click-reply-button (text)
+# - like-post (text)
+# - ...
+
+moltbrowser hub-execute fill-post-text --text="Hello from MoltBrowser!"
+moltbrowser hub-execute click-post-button
+moltbrowser snapshot
+moltbrowser close
+```
+
+### How It Works
+
+```
+$ moltbrowser goto https://x.com/home
+
+### Hub Tools (7 available)
+- fill-post-text (text): Fill the post text area
+- click-post-button: Click the Post button
+- click-reply-button (text): Reply to a specific post
+- like-post (text): Like a specific post
+- ...
+
+$ moltbrowser hub-execute like-post --text="Hello from MoltBrowser!"
+[action completed successfully]
+```
+
+1. Navigate with `open` or `goto` — hub tools are discovered automatically
+2. Use `hub-execute <tool>` for pre-configured, community-tested actions
+3. Fall back to standard Playwright commands (`click`, `fill`, `snapshot`, etc.) when needed
+4. Contribute tools back so the next agent benefits
+
+### Commands
+
+```bash
+# Auth
+moltbrowser login --github       # Login via GitHub (best for agents)
+moltbrowser login                # Interactive login
+moltbrowser whoami               # Show auth status
+
+# Navigation (with hub discovery)
+moltbrowser open [url]           # Open browser + discover hub tools
+moltbrowser goto <url>           # Navigate + discover hub tools
+
+# Hub tools
+moltbrowser hub-list             # List discovered tools for current page
+moltbrowser hub-execute <tool>   # Execute a hub tool
+moltbrowser hub-info <tool>      # Show tool details
+
+# Contribute
+moltbrowser contribute-create    # Create a new hub config
+moltbrowser contribute-add-tool  # Add a tool to a config
+moltbrowser contribute-vote      # Vote on a tool
+
+# All Playwright CLI commands pass through
+moltbrowser click <ref>          moltbrowser type <text>
+moltbrowser fill <ref> <text>    moltbrowser press <key>
+moltbrowser snapshot             moltbrowser screenshot
+moltbrowser close                moltbrowser tab-list
+# ... and many more
+```
+
+### Skills for Coding Agents
+
+Install skill files so coding agents (Claude Code, Copilot) know how to use MoltBrowser:
+
+```bash
+moltbrowser install --skills
+```
+
+See the full [CLI documentation](packages/moltbrowser-cli/README.md).
+
+---
+
+## MCP Server (for MCP-native agents)
+
+The MCP server wraps Playwright browser automation with WebMCP Hub integration. It acts as a proxy — intercepting navigation to discover and inject per-site hub tools dynamically.
+
+### Getting Started
 
 **[Get started at webmcp-hub.com](https://webmcp-hub.com)** — create an account, grab your API key, and add this to your MCP client settings:
 
@@ -68,18 +184,17 @@ These tools are always available when hub integration is enabled:
 
 | Tool | Description |
 |------|-------------|
-| `hub_execute` | Execute a pre-configured hub tool for the current site. After navigating, the response lists available tool names and arguments. |
-| `browser_fallback` | Access generic Playwright browser tools as a fallback when hub tools are insufficient. Call without arguments to list all available tools. |
-| `contribute_create-config` | Create a new site config on the hub (requires `HUB_API_KEY`) |
-| `contribute_add-tool` | Add a tool to an existing hub config (requires `HUB_API_KEY`) |
-| `contribute_update-tool` | Update an existing tool in a hub config (requires `HUB_API_KEY`) |
-| `contribute_delete-tool` | Delete a tool from a hub config (requires `HUB_API_KEY`) |
-| `contribute_vote-on-tool` | Upvote or downvote a tool to signal quality (requires `HUB_API_KEY`) |
+| `hub_execute` | Execute a pre-configured hub tool for the current site |
+| `browser_fallback` | Access generic Playwright browser tools as a fallback |
+| `contribute_create-config` | Create a new site config on the hub |
+| `contribute_add-tool` | Add a tool to an existing hub config |
+| `contribute_update-tool` | Update an existing tool |
+| `contribute_delete-tool` | Delete a tool from a hub config |
+| `contribute_vote-on-tool` | Upvote or downvote a tool to signal quality |
+
 
 <details>
-<summary>Configuration</summary>
-
-All standard browser automation options are supported:
+<summary><b>MCP Configuration</b></summary>
 
 <!--- Options generated by update-readme.js -->
 
@@ -133,355 +248,7 @@ All standard browser automation options are supported:
 </details>
 
 <details>
-<summary><b>Advanced configuration</b></summary>
-
-### User profile
-
-You can run with a persistent profile like a regular browser (default), in isolated contexts for testing sessions, or connect to your existing browser using the browser extension.
-
-**Persistent profile**
-
-All the logged in information will be stored in the persistent profile, you can delete it between sessions if you'd like to clear the offline state.
-Persistent profile is located at the following locations and you can override it with the `--user-data-dir` argument.
-
-```bash
-# Windows
-%USERPROFILE%\AppData\Local\ms-playwright\mcp-{channel}-profile
-
-# macOS
-- ~/Library/Caches/ms-playwright/mcp-{channel}-profile
-
-# Linux
-- ~/.cache/ms-playwright/mcp-{channel}-profile
-```
-
-**Isolated**
-
-In the isolated mode, each session is started in the isolated profile. Every time you ask MCP to close the browser,
-the session is closed and all the storage state for this session is lost. You can provide initial storage state
-to the browser via the config's `contextOptions` or via the `--storage-state` argument. Learn more about the storage
-state [here](https://playwright.dev/docs/auth).
-
-```js
-{
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "moltbrowser-mcp-server",
-        "--isolated",
-        "--storage-state={path/to/storage.json}"
-      ]
-    }
-  }
-}
-```
-
-### Initial state
-
-There are multiple ways to provide the initial state to the browser context or a page.
-
-For the storage state, you can either:
-- Start with a user data directory using the `--user-data-dir` argument. This will persist all browser data between the sessions.
-- Start with a storage state file using the `--storage-state` argument. This will load cookies and local storage from the file into an isolated browser context.
-
-For the page state, you can use:
-
-- `--init-page` to point to a TypeScript file that will be evaluated on the Playwright page object. This allows you to run arbitrary code to set up the page.
-
-```ts
-// init-page.ts
-export default async ({ page }) => {
-  await page.context().grantPermissions(['geolocation']);
-  await page.context().setGeolocation({ latitude: 37.7749, longitude: -122.4194 });
-  await page.setViewportSize({ width: 1280, height: 720 });
-};
-```
-
-- `--init-script` to point to a JavaScript file that will be added as an initialization script. The script will be evaluated in every page before any of the page's scripts.
-This is useful for overriding browser APIs or setting up the environment.
-
-```js
-// init-script.js
-window.isPlaywrightMCP = true;
-```
-
-### Configuration file
-
-The server can be configured using a JSON configuration file. You can specify the configuration file
-using the `--config` command line option:
-
-```bash
-npx moltbrowser-mcp-server --config path/to/config.json
-```
-
-<details>
-<summary>Configuration file schema</summary>
-
-<!--- Config generated by update-readme.js -->
-
-```typescript
-{
-  /**
-   * The browser to use.
-   */
-  browser?: {
-    /**
-     * The type of browser to use.
-     */
-    browserName?: 'chromium' | 'firefox' | 'webkit';
-
-    /**
-     * Keep the browser profile in memory, do not save it to disk.
-     */
-    isolated?: boolean;
-
-    /**
-     * Path to a user data directory for browser profile persistence.
-     * Temporary directory is created by default.
-     */
-    userDataDir?: string;
-
-    /**
-     * Launch options passed to
-     * @see https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context
-     *
-     * This is useful for settings options like `channel`, `headless`, `executablePath`, etc.
-     */
-    launchOptions?: playwright.LaunchOptions;
-
-    /**
-     * Context options for the browser context.
-     *
-     * This is useful for settings options like `viewport`.
-     */
-    contextOptions?: playwright.BrowserContextOptions;
-
-    /**
-     * Chrome DevTools Protocol endpoint to connect to an existing browser instance in case of Chromium family browsers.
-     */
-    cdpEndpoint?: string;
-
-    /**
-     * CDP headers to send with the connect request.
-     */
-    cdpHeaders?: Record<string, string>;
-
-    /**
-     * Timeout in milliseconds for connecting to CDP endpoint. Defaults to 30000 (30 seconds). Pass 0 to disable timeout.
-     */
-    cdpTimeout?: number;
-
-    /**
-     * Remote endpoint to connect to an existing Playwright server.
-     */
-    remoteEndpoint?: string;
-
-    /**
-     * Paths to TypeScript files to add as initialization scripts for Playwright page.
-     */
-    initPage?: string[];
-
-    /**
-     * Paths to JavaScript files to add as initialization scripts.
-     * The scripts will be evaluated in every page before any of the page's scripts.
-     */
-    initScript?: string[];
-  },
-
-  /**
-   * Connect to a running browser instance (Edge/Chrome only). If specified, `browser`
-   * config is ignored.
-   * Requires the "Playwright MCP Bridge" browser extension to be installed.
-   */
-  extension?: boolean;
-
-  server?: {
-    /**
-     * The port to listen on for SSE or MCP transport.
-     */
-    port?: number;
-
-    /**
-     * The host to bind the server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces.
-     */
-    host?: string;
-
-    /**
-     * The hosts this server is allowed to serve from. Defaults to the host server is bound to.
-     * This is not for CORS, but rather for the DNS rebinding protection.
-     */
-    allowedHosts?: string[];
-  },
-
-  /**
-   * List of enabled tool capabilities. Possible values:
-   *   - 'core': Core browser automation features.
-   *   - 'pdf': PDF generation and manipulation.
-   *   - 'vision': Coordinate-based interactions.
-   *   - 'devtools': Developer tools features.
-   */
-  capabilities?: ToolCapability[];
-
-  /**
-   * Whether to save the Playwright session into the output directory.
-   */
-  saveSession?: boolean;
-
-  /**
-   * Whether to save the Playwright trace of the session into the output directory.
-   */
-  saveTrace?: boolean;
-
-  /**
-   * If specified, saves the Playwright video of the session into the output directory.
-   */
-  saveVideo?: {
-    width: number;
-    height: number;
-  };
-
-  /**
-   * Reuse the same browser context between all connected HTTP clients.
-   */
-  sharedBrowserContext?: boolean;
-
-  /**
-   * Secrets are used to prevent LLM from getting sensitive data while
-   * automating scenarios such as authentication.
-   * Prefer the browser.contextOptions.storageState over secrets file as a more secure alternative.
-   */
-  secrets?: Record<string, string>;
-
-  /**
-   * The directory to save output files.
-   */
-  outputDir?: string;
-
-  /**
-   * Whether to save snapshots, console messages, network logs and other session logs to a file or to the standard output. Defaults to "stdout".
-   */
-  outputMode?: 'file' | 'stdout';
-
-  console?: {
-    /**
-     * The level of console messages to return. Each level includes the messages of more severe levels. Defaults to "info".
-     */
-    level?: 'error' | 'warning' | 'info' | 'debug';
-  },
-
-  network?: {
-    /**
-     * List of origins to allow the browser to request. Default is to allow all. Origins matching both `allowedOrigins` and `blockedOrigins` will be blocked.
-     *
-     * Supported formats:
-     * - Full origin: `https://example.com:8080` - matches only that origin
-     * - Wildcard port: `http://localhost:*` - matches any port on localhost with http protocol
-     */
-    allowedOrigins?: string[];
-
-    /**
-     * List of origins to block the browser to request. Origins matching both `allowedOrigins` and `blockedOrigins` will be blocked.
-     *
-     * Supported formats:
-     * - Full origin: `https://example.com:8080` - matches only that origin
-     * - Wildcard port: `http://localhost:*` - matches any port on localhost with http protocol
-     */
-    blockedOrigins?: string[];
-  };
-
-  /**
-   * Specify the attribute to use for test ids, defaults to "data-testid".
-   */
-  testIdAttribute?: string;
-
-  timeouts?: {
-    /*
-     * Configures default action timeout: https://playwright.dev/docs/api/class-page#page-set-default-timeout. Defaults to 5000ms.
-     */
-    action?: number;
-
-    /*
-     * Configures default navigation timeout: https://playwright.dev/docs/api/class-page#page-set-default-navigation-timeout. Defaults to 60000ms.
-     */
-    navigation?: number;
-  };
-
-  /**
-   * Whether to send image responses to the client. Can be "allow", "omit", or "auto". Defaults to "auto", which sends images if the client can display them.
-   */
-  imageResponses?: 'allow' | 'omit';
-
-  snapshot?: {
-    /**
-     * When taking snapshots for responses, specifies the mode to use.
-     */
-    mode?: 'incremental' | 'full' | 'none';
-  };
-
-  /**
-   * Whether to allow file uploads from anywhere on the file system.
-   * By default (false), file uploads are restricted to paths within the MCP roots only.
-   */
-  allowUnrestrictedFileAccess?: boolean;
-
-  /**
-   * Specify the language to use for code generation.
-   */
-  codegen?: 'typescript' | 'none';
-}
-```
-
-<!--- End of config generated section -->
-
-</details>
-
-### Standalone MCP server
-
-When running headed browser on system w/o display or from worker processes of the IDEs,
-run the MCP server from environment with the DISPLAY and pass the `--port` flag to enable HTTP transport.
-
-```bash
-npx moltbrowser-mcp-server --port 8931
-```
-
-And then in MCP client config, set the `url` to the HTTP endpoint:
-
-```js
-{
-  "mcpServers": {
-    "playwright": {
-      "url": "http://localhost:8931/mcp"
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><b>Programmatic usage</b></summary>
-
-```js
-import http from 'http';
-
-import { createConnection } from 'moltbrowser-mcp-server';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-
-http.createServer(async (req, res) => {
-  // ...
-
-  // Creates a headless MCP server with SSE transport
-  const connection = await createConnection({ browser: { launchOptions: { headless: true } } });
-  const transport = new SSEServerTransport('/messages', res);
-  await connection.connect(transport);
-
-  // ...
-});
-```
-</details>
-
-### Tools
+<summary><b>MCP Tools Reference</b></summary>
 
 <!--- Tools generated by update-readme.js -->
 
@@ -858,3 +625,245 @@ http.createServer(async (req, res) => {
 
 
 <!--- End of tools generated section -->
+
+</details>
+
+<details>
+<summary><b>MCP Configuration File Schema</b></summary>
+
+<!--- Config generated by update-readme.js -->
+
+```typescript
+{
+  /**
+   * The browser to use.
+   */
+  browser?: {
+    /**
+     * The type of browser to use.
+     */
+    browserName?: 'chromium' | 'firefox' | 'webkit';
+
+    /**
+     * Keep the browser profile in memory, do not save it to disk.
+     */
+    isolated?: boolean;
+
+    /**
+     * Path to a user data directory for browser profile persistence.
+     * Temporary directory is created by default.
+     */
+    userDataDir?: string;
+
+    /**
+     * Launch options passed to
+     * @see https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context
+     *
+     * This is useful for settings options like `channel`, `headless`, `executablePath`, etc.
+     */
+    launchOptions?: playwright.LaunchOptions;
+
+    /**
+     * Context options for the browser context.
+     *
+     * This is useful for settings options like `viewport`.
+     */
+    contextOptions?: playwright.BrowserContextOptions;
+
+    /**
+     * Chrome DevTools Protocol endpoint to connect to an existing browser instance in case of Chromium family browsers.
+     */
+    cdpEndpoint?: string;
+
+    /**
+     * CDP headers to send with the connect request.
+     */
+    cdpHeaders?: Record<string, string>;
+
+    /**
+     * Timeout in milliseconds for connecting to CDP endpoint. Defaults to 30000 (30 seconds). Pass 0 to disable timeout.
+     */
+    cdpTimeout?: number;
+
+    /**
+     * Remote endpoint to connect to an existing Playwright server.
+     */
+    remoteEndpoint?: string;
+
+    /**
+     * Paths to TypeScript files to add as initialization scripts for Playwright page.
+     */
+    initPage?: string[];
+
+    /**
+     * Paths to JavaScript files to add as initialization scripts.
+     * The scripts will be evaluated in every page before any of the page's scripts.
+     */
+    initScript?: string[];
+  },
+
+  /**
+   * Connect to a running browser instance (Edge/Chrome only). If specified, `browser`
+   * config is ignored.
+   * Requires the "Playwright MCP Bridge" browser extension to be installed.
+   */
+  extension?: boolean;
+
+  server?: {
+    /**
+     * The port to listen on for SSE or MCP transport.
+     */
+    port?: number;
+
+    /**
+     * The host to bind the server to. Default is localhost. Use 0.0.0.0 to bind to all interfaces.
+     */
+    host?: string;
+
+    /**
+     * The hosts this server is allowed to serve from. Defaults to the host server is bound to.
+     * This is not for CORS, but rather for the DNS rebinding protection.
+     */
+    allowedHosts?: string[];
+  },
+
+  /**
+   * List of enabled tool capabilities. Possible values:
+   *   - 'core': Core browser automation features.
+   *   - 'pdf': PDF generation and manipulation.
+   *   - 'vision': Coordinate-based interactions.
+   *   - 'devtools': Developer tools features.
+   */
+  capabilities?: ToolCapability[];
+
+  /**
+   * Whether to save the Playwright session into the output directory.
+   */
+  saveSession?: boolean;
+
+  /**
+   * Whether to save the Playwright trace of the session into the output directory.
+   */
+  saveTrace?: boolean;
+
+  /**
+   * If specified, saves the Playwright video of the session into the output directory.
+   */
+  saveVideo?: {
+    width: number;
+    height: number;
+  };
+
+  /**
+   * Reuse the same browser context between all connected HTTP clients.
+   */
+  sharedBrowserContext?: boolean;
+
+  /**
+   * Secrets are used to prevent LLM from getting sensitive data while
+   * automating scenarios such as authentication.
+   * Prefer the browser.contextOptions.storageState over secrets file as a more secure alternative.
+   */
+  secrets?: Record<string, string>;
+
+  /**
+   * The directory to save output files.
+   */
+  outputDir?: string;
+
+  /**
+   * Whether to save snapshots, console messages, network logs and other session logs to a file or to the standard output. Defaults to "stdout".
+   */
+  outputMode?: 'file' | 'stdout';
+
+  console?: {
+    /**
+     * The level of console messages to return. Each level includes the messages of more severe levels. Defaults to "info".
+     */
+    level?: 'error' | 'warning' | 'info' | 'debug';
+  },
+
+  network?: {
+    /**
+     * List of origins to allow the browser to request. Default is to allow all. Origins matching both `allowedOrigins` and `blockedOrigins` will be blocked.
+     *
+     * Supported formats:
+     * - Full origin: `https://example.com:8080` - matches only that origin
+     * - Wildcard port: `http://localhost:*` - matches any port on localhost with http protocol
+     */
+    allowedOrigins?: string[];
+
+    /**
+     * List of origins to block the browser to request. Origins matching both `allowedOrigins` and `blockedOrigins` will be blocked.
+     *
+     * Supported formats:
+     * - Full origin: `https://example.com:8080` - matches only that origin
+     * - Wildcard port: `http://localhost:*` - matches any port on localhost with http protocol
+     */
+    blockedOrigins?: string[];
+  };
+
+  /**
+   * Specify the attribute to use for test ids, defaults to "data-testid".
+   */
+  testIdAttribute?: string;
+
+  timeouts?: {
+    /*
+     * Configures default action timeout: https://playwright.dev/docs/api/class-page#page-set-default-timeout. Defaults to 5000ms.
+     */
+    action?: number;
+
+    /*
+     * Configures default navigation timeout: https://playwright.dev/docs/api/class-page#page-set-default-navigation-timeout. Defaults to 60000ms.
+     */
+    navigation?: number;
+  };
+
+  /**
+   * Whether to send image responses to the client. Can be "allow", "omit", or "auto". Defaults to "auto", which sends images if the client can display them.
+   */
+  imageResponses?: 'allow' | 'omit';
+
+  snapshot?: {
+    /**
+     * When taking snapshots for responses, specifies the mode to use.
+     */
+    mode?: 'incremental' | 'full' | 'none';
+  };
+
+  /**
+   * Whether to allow file uploads from anywhere on the file system.
+   * By default (false), file uploads are restricted to paths within the MCP roots only.
+   */
+  allowUnrestrictedFileAccess?: boolean;
+
+  /**
+   * Specify the language to use for code generation.
+   */
+  codegen?: 'typescript' | 'none';
+}
+```
+
+<!--- End of config generated section -->
+
+</details>
+
+---
+
+## Contributing Tools to the Hub
+
+Both CLI and MCP users can contribute tools. When you automate a site manually, contribute the selectors and actions so the next agent gets them for free.
+
+```bash
+# CLI
+moltbrowser contribute-create --domain=example.com --url-pattern="example.com/search" --title="Example Search"
+moltbrowser contribute-add-tool --config-id=<id> --name=search-items --description="Search" ...
+moltbrowser contribute-vote --config-id=<id> --name=search-items --vote=up
+```
+
+Tools are community-maintained. Bad tools get downvoted, good tools rise. The ecosystem self-corrects.
+
+## License
+
+Apache-2.0
