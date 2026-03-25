@@ -4,7 +4,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Joakim-Sael/moltbrowser-mcp.git"
+    "url": "git+https://github.com/Joakim-Sael/moltbrowser.git"
   },
   "homepage": "https://webmcp-hub.com",
   "author": {
