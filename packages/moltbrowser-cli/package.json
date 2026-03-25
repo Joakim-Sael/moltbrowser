@@ -1,0 +1,51 @@
+{
+  "name": "moltbrowser-cli",
+  "version": "1.0.0",
+  "description": "Browser automation CLI with WebMCP Hub integration — per-site tools for coding agents",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Joakim-Sael/moltbrowser-mcp.git"
+  },
+  "homepage": "https://webmcp-hub.com",
+  "engines": {
+    "node": ">=18"
+  },
+  "author": {
+    "name": "Joakim Saelemyr"
+  },
+  "license": "Apache-2.0",
+  "files": [
+    "moltbrowser.js",
+    "src/**/*.js",
+    "skills/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "playwright test",
+    "build": "echo OK"
+  },
+  "bin": {
+    "moltbrowser": "moltbrowser.js"
+  },
+  "dependencies": {
+    "minimist": "^1.2.5",
+    "moltbrowser-mcp-server": "*"
+  },
+  "peerDependencies": {
+    "@playwright/cli": ">=0.1.0",
+    "playwright": ">=1.58.0"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/cli": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.3.0",
+    "playwright": "^1.58.2"
+  }
+}
