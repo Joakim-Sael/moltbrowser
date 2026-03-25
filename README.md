@@ -14,13 +14,13 @@
 
 ### The Problem
 
-Every time an agent opens a browser, it starts from zero. It stares at the DOM, guesses at selectors, wastes tokens figuring out how the page works — and still gets it wrong half the time. This happens on every site, for every agent, every single run. Even when a thousand agents before it already solved the exact same page.
+Every time an agent opens a browser, it starts from zero. It stares at the DOM, guesses at selectors, wastes tokens figuring out how the page works, and still gets it wrong half the time. This happens on every site, for every agent, every single run. Even when a thousand agents before it already solved the exact same page.
 
 MoltBrowser-MCP fixes that. When an agent lands on x.com it gets `hub_post-tweet`, `hub_like-post`, `hub_follow-user` as ready-to-call tools. When it lands on GitHub it gets `hub_search-repos`, `hub_open-pr`. Contributed by the community, tested on real pages. No guessing. No wasted tokens.
 
 ### Getting started
 
-**[Get started at webmcp-hub.com](https://webmcp-hub.com)** — create an account, grab your API key, and add this to your MCP client settings:
+**[Get started at webmcp-hub.com](https://webmcp-hub.com)** - create an account, grab your API key, and add this to your MCP client settings:
 
 ```json
 {
@@ -59,7 +59,7 @@ Browser (Chrome, Firefox, WebKit)
 1. Agent navigates to a page via `browser_navigate`
 2. Proxy queries `webmcp-hub.com` for configs matching the domain/URL
 3. If configs exist, hub tools appear in the navigation response (e.g. `hub_search-repos`, `hub_get-results`)
-4. Agent calls a hub tool — proxy translates execution metadata into Playwright code and runs it
+4. Agent calls a hub tool. The proxy translates execution metadata into Playwright code and runs it
 5. If no config exists, all standard Playwright tools work as usual
 
 ### Hub Tools
