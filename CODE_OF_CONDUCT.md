@@ -33,7 +33,7 @@ Examples of unacceptable behavior:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by opening a [private security advisory](https://github.com/Joakim-Sael/moltbrowser-mcp/security/advisories/new)
+reported by opening a [private security advisory](https://github.com/Joakim-Sael/moltbrowser/security/advisories/new)
 or contacting the maintainer directly. All complaints will be reviewed and
 investigated promptly and fairly.
 

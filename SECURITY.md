@@ -4,7 +4,7 @@
 
 Please do not report security vulnerabilities through public GitHub issues.
 
-Instead, use [GitHub's private vulnerability reporting](https://github.com/Joakim-Sael/moltbrowser-mcp/security/advisories/new) to submit a report confidentially.
+Instead, use [GitHub's private vulnerability reporting](https://github.com/Joakim-Sael/moltbrowser/security/advisories/new) to submit a report confidentially.
 
 When reporting, please include:
 

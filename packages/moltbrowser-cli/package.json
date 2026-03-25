@@ -4,7 +4,7 @@
   "description": "Browser automation CLI with WebMCP Hub integration — per-site tools for coding agents",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Joakim-Sael/moltbrowser-mcp.git"
+    "url": "git+https://github.com/Joakim-Sael/moltbrowser.git"
   },
   "homepage": "https://webmcp-hub.com",
   "engines": {

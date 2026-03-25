@@ -14,7 +14,7 @@ packages/
 Clone the repo and install dependencies:
 
 ```bash
-git clone https://github.com/Joakim-Sael/moltbrowser-mcp.git
+git clone https://github.com/Joakim-Sael/moltbrowser.git
 cd moltbrowser-mcp
 npm ci
 ```
@@ -52,7 +52,7 @@ Good areas to contribute:
 - **Test coverage** — tests for hub proxy logic, tool registration/deregistration on navigation
 - **Bug fixes** — anything in the issue tracker
 
-Please [open an issue](https://github.com/Joakim-Sael/moltbrowser-mcp/issues) before starting work on a significant change. This helps avoid duplicate effort and makes for a smoother review.
+Please [open an issue](https://github.com/Joakim-Sael/moltbrowser/issues) before starting work on a significant change. This helps avoid duplicate effort and makes for a smoother review.
 
 ## Commit messages
 
